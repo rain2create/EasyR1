@@ -295,3 +295,52 @@ class DataParallelPPOActor(BasePPOActor):
                 append_to_dict(metrics, {"actor/grad_norm": grad_norm.detach().item()})
 
         return metrics
+
+    # =============================================================================
+    # 【update_policy 函数流程注释】
+    # =============================================================================
+    # 这是一个 PPO (Proximal Policy Optimization) 策略更新函数，核心目标是让模型生成
+    # 高奖励的回复，同时避免策略更新过大导致训练不稳定。
+    #
+    # 【整体流程概述】
+    # ┌─────────────────────────────────────────────────────────────────────────────┐
+    # │  输入: DataProto (包含 prompts、responses、advantages、old_log_probs 等)        │
+    # │      ↓                                                                      │
+    # │  Step 1: 数据准备 - 提取关键字段并分割成 mini-batches                          │
+    # │      ↓                                                                      │
+    # │  Step 2: 外层循环 ppo_epochs (通常 1-2 轮) - 数据复用多次训练                   │
+    # │      ↓                                                                      │
+    # │  Step 3: 中层循环遍历 mini_batches (global batch 维度)                        │
+    # │      ↓                                                                      │
+    # │  Step 4: 计算总 response tokens (用于梯度归一化)                              │
+    # │      ↓                                                                      │
+    # │  Step 5: 分割 micro_batches (单卡显存可容纳的大小)                            │
+    # │      ↓                                                                      │
+    # │  Step 6: 内层循环遍历 micro_batches                                           │
+    # │          ├─ 6.1 前向传播: 计算当前策略的 log_probs (新策略的概率)               │
+    # │          ├─ 6.2 计算策略损失 pg_loss (PPO-clip 机制防止更新过大)                │
+    # │          ├─ 6.3 [可选] 计算 KL 散度惩罚 (约束与参考策略的距离)                  │
+    # │          ├─ 6.4 反向传播计算梯度                                               │
+    # │          └─ 6.5 收集指标 (pg_loss, clip_ratio 等)                            │
+    # │      ↓                                                                      │
+    # │  Step 7: 梯度裁剪 + 优化器更新参数                                             │
+    # │      ↓                                                                      │
+    # │  输出: metrics 字典 (包含各项损失和训练指标)                                   │
+    # └─────────────────────────────────────────────────────────────────────────────┘
+    #
+    # 【关键技术细节】
+    # 1. PPO-Clip 机制: compute_policy_loss 内部实现，通过 clip_ratio_low/high 限制
+    #    新旧策略的概率比，防止策略更新过大
+    #
+    # 2. KL 惩罚: 如果启用 use_kl_loss，会计算当前策略与参考策略(ref)的 KL 散度，
+    #    防止策略偏离参考策略太远（类似 GRPO 中的 KL 约束）
+    #
+    # 3. 梯度归一化: loss = loss * world_size / total_response_tokens，
+    #    按 response 长度加权平均，确保梯度大小与 batch 大小无关
+    #
+    # 4. Dynamic Batching: 如果启用，会按序列长度动态组合 batch，提高训练效率
+    #
+    # 【与标准 PPO 的区别】
+    # - 这里的 advantages 是外部计算好传入的（由 critic 或 GRPO 的组内归一化产生）
+    # - 支持多种 loss_type (PPO, GRPO, DAPO 等)，通过 compute_policy_loss 分发
+    # =============================================================================

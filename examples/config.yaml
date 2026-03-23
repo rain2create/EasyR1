@@ -1,6 +1,6 @@
 data:
-  train_files: hiyouga/math12k@train
-  val_files: hiyouga/math12k@test
+  train_files: hiyouga/math12k@train  ## 在线数据集可以下载到本地的
+  val_files: hiyouga/math12k@test     ## 在线数据集可以下载到本地的
   prompt_key: problem
   answer_key: answer
   image_key: images
@@ -9,8 +9,8 @@ data:
   video_fps: 2.0
   max_prompt_length: 2048
   max_response_length: 2048
-  rollout_batch_size: 512  # equivalent to verl's data.train_batch_size
-  mini_rollout_batch_size: null  # equivalent to verl's data.gen_batch_size
+  rollout_batch_size: 512  # equivalent to verl's data.train_batch_size  每次采样的样本数量，过大可能导致显存不足，过小可能导致训练不稳定
+  mini_rollout_batch_size: null  # equivalent to verl's data.gen_batch_size  如果设置了mini_rollout_batch_size，则rollout_batch_size会被忽略，采样时会根据mini_rollout_batch_size动态调整每次采样的样本数量，以适应显存限制
   val_batch_size: 1024
   format_prompt: ./examples/format_prompt/math.jinja
   override_chat_template: null
@@ -21,7 +21,7 @@ data:
   filter_overlong_prompts: true
 
 algorithm:
-  adv_estimator: grpo
+  adv_estimator: grpoEasyR1\examples\qwen2_5_vl_7b_geo3k_grpo.sh
   disable_kl: false
   use_kl_loss: true
   kl_penalty: low_var_kl
@@ -34,7 +34,7 @@ algorithm:
 worker:
   actor:
     global_batch_size: 128  # equivalent to verl's actor.ppo_mini_batch_size
-    micro_batch_size_per_device_for_update: 1  # equivalent to verl's actor.ppo_micro_batch_size_per_gpu
+    micro_batch_size_per_device_for_update: 1  # equivalent to verl's actor.ppo_micro_batch_size_per_gpu  
     micro_batch_size_per_device_for_experience: 2  # equivalent to verl's rollout.log_prob_micro_batch_size_per_gpu
     max_grad_norm: 1.0
     padding_free: true
@@ -64,7 +64,7 @@ worker:
       offload_optimizer: true  # true: more CPU memory; false: more GPU memory
 
   rollout:
-    n: 5
+    n: 5  
     temperature: 1.0
     top_p: 1.0
     limit_images: 0
