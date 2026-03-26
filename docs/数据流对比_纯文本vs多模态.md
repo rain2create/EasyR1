@@ -218,9 +218,11 @@ Step 4: 图像预处理 ⭐ 关键差异
     输出:
     PIL.Image: (H, W, 3)  例如 (512, 512, 3)
 
-Step 5: Processor 处理 ⭐ 关键差异
+Step 5: Processor 处理 ⭐ 关键差异   把文本转成token/把图像转成 pixel_values  -这里转换图像只是为了计算需要塞入多少个img_padding
 ─────────────────────────────────────────────────────────────────────────────────
     processor(images=[PIL.Image], text=[prompt], return_tensors="pt")
+    
+    注意: Processor 只是数据预处理，不包含 Vision Encoder！
     
     输出:
     ┌─────────────────────────────────────────────────────────────────┐
@@ -231,16 +233,17 @@ Step 5: Processor 处理 ⭐ 关键差异
     │ attention_mask: [1, 1, 1, ..., 1, ...]                          │
     │                 shape: (seq_len,)                               │
     │                                                                 │
-    │ pixel_values:   tensor(shape=(num_patches, embed_dim))          │
-    │                 例如: (256, 1280)                               │
-    │                 图像的 patch embeddings                         │
+    │ pixel_values:   tensor(shape=(num_patches, patch_pixels))       │
+    │                 例如: (784, 588)                                │
+    │                 原始像素值，不是 embeddings！                     │
+    │                 每个 patch 有 14×14×3 = 588 个像素值             │
     │                                                                 │
     │ image_grid_thw: tensor(shape=(1, 3))                            │
     │                 例如: [[1, 28, 28]]                             │
     │                 表示图像的 temporal, height, width 网格         │
     └─────────────────────────────────────────────────────────────────┘
 
-Step 6: MRoPE 位置编码 ⭐ 关键差异 (Qwen2-VL 特有)
+Step 6: MRoPE 位置编码 ⭐ 关键差异 (Qwen2-VL 特有)   ## 算4d的位置编码  
 ─────────────────────────────────────────────────────────────────────────────────
     get_rope_index(processor, input_ids, image_grid_thw)
     
@@ -273,7 +276,7 @@ Step 7: Left Padding & 截断
     │ image_grid_thw: shape: (1, 3)                                   │
     └─────────────────────────────────────────────────────────────────┘
 
-Step 8: 生成阶段 (vLLM) ⭐ 关键差异
+Step 8: 生成阶段 (vLLM) ⭐ 关键差异   这里包含ViT--真正将图片转成 (patch_size,emb) 并经过整套Qwen2.5-vl流程
 ─────────────────────────────────────────────────────────────────────────────────
     vllm_inputs = [{
         "prompt_token_ids": [151644, 8940, ...],
@@ -290,7 +293,7 @@ Step 8: 生成阶段 (vLLM) ⭐ 关键差异
     │ old_log_probs:  shape: (response_len,)                          │
     └─────────────────────────────────────────────────────────────────┘
 
-Step 9: 多模态输入预处理 (Worker 内部) ⭐ 关键差异
+Step 9: 多模态输入预处理 (Worker 内部) ⭐ 关键差异      -- 这里是拿图片的pixcel_values; 模型向前传播需要pixcel_values  
 ─────────────────────────────────────────────────────────────────────────────────
     _process_multi_modal_inputs(data)
     
